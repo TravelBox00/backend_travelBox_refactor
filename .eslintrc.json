@@ -1,0 +1,43 @@
+{
+  "parser": "@typescript-eslint/parser",
+  "extends": [
+    "airbnb-base",                       // Airbnb의 기본 JavaScript 스타일 가이드
+    "plugin:@typescript-eslint/recommended", // TypeScript 추천 규칙
+    "plugin:prettier/recommended"       // Prettier와 통합
+  ],
+  "plugins": [
+    "@typescript-eslint",
+    "prettier"
+  ],
+  "env": {
+    "browser": false,
+    "node": true,
+    "es2021": true
+  },
+  "parserOptions": {
+    "ecmaVersion": 2021,
+    "sourceType": "module"
+  },
+  "rules": {
+    "prettier/prettier": ["error"],     // Prettier 규칙을 ESLint 에러로 표시
+    "import/extensions": [
+      "error",
+      "ignorePackages",
+      {
+        "ts": "always",
+        "js": "never"
+      }
+    ],
+    "no-console": "off",                // Express 프로젝트에서 콘솔 로그 허용
+    "class-methods-use-this": "off",   // 클래스 메서드에서 `this` 강제 사용 비활성화
+    "@typescript-eslint/no-unused-vars": ["error"], // 미사용 변수 경고
+    "no-underscore-dangle": "off"      // Express 환경에서 `_id`와 같은 변수 허용
+  },
+  "settings": {
+    "import/resolver": {
+      "node": {
+        "extensions": [".js", ".ts"]
+      }
+    }
+  }
+}

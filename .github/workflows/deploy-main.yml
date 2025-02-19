@@ -1,0 +1,124 @@
+name: deploy-main
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # 이전 커밋도 가져오기 위해 설정
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'   # npm 캐시 활성화
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          cat > ~/.ssh/config << EOF
+          Host playground-umc-7th
+            HostName ${{ secrets.EC2_HOST }}
+            User ubuntu
+            IdentityFile ~/.ssh/id_rsa
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+            LogLevel ERROR
+          EOF
+
+      - name: Test SSH Connection
+        run: |
+          ssh -vvv playground-umc-7th "echo '✅ SSH Connection Successful'"
+
+      - name: Check for package.json changes
+        id: check-package
+        run: |
+          CHANGED=$(git diff HEAD^1 --name-only | grep "package.json" || echo "")
+          echo "::set-output name=changed::${CHANGED}"
+
+      - name: Get package-lock.json hash
+        id: package-lock-hash
+        run: |
+          if ssh playground-umc-7th "test -f /home/ubuntu/travel_box_backend/package-lock.json"; then
+            REMOTE_HASH=$(ssh playground-umc-7th "md5sum /home/ubuntu/travel_box_backend/package-lock.json | cut -d' ' -f1")
+            LOCAL_HASH=$(md5sum package-lock.json | cut -d' ' -f1)
+            if [ "$REMOTE_HASH" != "$LOCAL_HASH" ]; then
+              echo "::set-output name=changed::true"
+            else
+              echo "::set-output name=changed::false"
+            fi
+          else
+            echo "::set-output name=changed::true"
+          fi
+
+      - name: Sync Changed Files
+        run: |
+          ssh playground-umc-7th 'mkdir -p /home/ubuntu/travel_box_backend'
+          git diff --name-only HEAD^1 HEAD | while read file; do
+            if [ -f "$file" ]; then
+              rsync -avz --relative "$file" playground-umc-7th:/home/ubuntu/travel_box_backend/
+            fi
+          done
+
+      - name: Install Dependencies if needed
+        if: steps.check-package.outputs.changed != '' || steps.package-lock-hash.outputs.changed == 'true'
+        run: |
+          ssh playground-umc-7th '
+            cd /home/ubuntu/travel_box_backend
+            npm install
+          '
+
+      - name: Create or Update .env file
+        run: |
+          ssh playground-umc-7th 'cat > /home/ubuntu/travel_box_backend/.env << EOF
+          DB_HOST=${{ secrets.DB_HOST }}
+          DB_USER=${{ secrets.DB_USER }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          DB_NAME=${{ secrets.DB_NAME }}
+          DB_PORT=${{ secrets.DB_PORT }}
+          PORT=${{ secrets.PORT }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          S3_ACCESS_KEY=${{ secrets.S3_ACCESS_KEY }}
+          S3_SECRET_KEY=${{ secrets.S3_SECRET_KEY }}
+          AWS_BUCKET=${{ secrets.AWS_BUCKET }}
+          AWS_REGION=${{ secrets.AWS_REGION }}
+          REDIS_HOST=${{ secrets.REDIS_HOST }}
+          ELASTIC_SEARCH=${{ secrets.ELASTIC_SEARCH }}
+          ELASTIC_SEARCH_API=${{ secrets.ELASTIC_SEARCH_API }}
+          SPOTIFY_CLIENT_ID=${{ secrets.SPOTIFY_CLIENT_ID }}
+          SPOTIFY_CLIENT_SECRET=${{ secrets.SPOTIFY_CLIENT_SECRET }}
+          EOF'
+
+      - name: Restart Application
+        run: |
+          ssh playground-umc-7th '
+            cd /home/ubuntu/travel_box_backend
+            if pgrep node; then
+              pkill node
+              sleep 5
+            fi
+            nohup npm run dev > app.log 2> app.error.log &
+          '
+
+      - name: Check if Application is Running
+        run: |
+          ssh playground-umc-7th '
+            sleep 10
+            if pgrep -x "node" > /dev/null; then
+              echo "✅ Application is running."
+            else
+              echo "❌ Application failed to start."
+              cat app.error.log
+              exit 1
+            fi
+          '

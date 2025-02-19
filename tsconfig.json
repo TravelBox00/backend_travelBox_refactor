@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2021", // 최신 JavaScript 기능
+    "module": "ESNext", // ECMAScript Modules 사용
+    "moduleResolution": "node",
+    "strict": true, // 엄격한 타입 검사
+    "allowJs": true,
+    "esModuleInterop": true, // CommonJS 모듈 호환
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "strictPropertyInitialization": false // 소스 폴더
+  },
+  "ts-node": {
+    "esm": true, // ts-node에서 ESM 지원
+    "experimentalSpecifierResolution": "node"
+  },
+  "include": ["src/**/*"], // 포함 경로
+  "exclude": ["node_modules", "dist"] // 제외 경로
+}
